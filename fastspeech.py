@@ -21,8 +21,10 @@ from core.embedding import ScaledPositionalEncoding
 from core.encoder import Encoder
 from core.modules import initialize
 from core.modules import Postnet
+from core.gmm_mdn import ProsodyExtractor, ProsodyPredictor
 from typeguard import check_argument_types
 from typing import Dict, Tuple, Sequence
+import math
 
 
 class FeedForwardTransformer(torch.nn.Module):
@@ -81,6 +83,19 @@ class FeedForwardTransformer(torch.nn.Module):
             positionwise_layer_type=hp.model.positionwise_layer_type,
             positionwise_conv_kernel_size=hp.model.positionwise_conv_kernel_size,
         )
+
+        self.prosody_extractor = ProsodyExtractor(
+                n_mel_channels=hp.audio.num_mels,
+                d_model=idim,
+                kernel_size=hp.model.extractor_kernel_size,
+        )
+        self.prosody_predictor = ProsodyPredictor(
+            d_model=idim,
+            kernel_size=hp.model.predictor_kernel_size,
+            num_gaussians=hp.model.predictor_num_gaussians,
+            dropout=hp.model.predictor_dropout,
+        )
+        self.prosody_linear = torch.nn.Linear(2 * idim, idim)
 
         self.duration_predictor = DurationPredictor(
             idim=hp.model.adim,
@@ -186,6 +201,14 @@ class FeedForwardTransformer(torch.nn.Module):
         )  # (B, Tmax, adim) -> torch.Size([32, 121, 256])
         # print("ys :", ys.shape)
 
+        # GMM-MDN for Phone-Level Prosody Modelling
+        w, sigma, mu = self.prosody_predictor(text, src_mask)
+        if self.training:
+            prosody_embeddings = self.prosody_extractor(mel, mel_len, duration_target, src_len)
+        else:
+            prosody_embeddings = self.prosody_predictor.sample(w, sigma, mu)
+        x = x + self.prosody_linear(prosody_embeddings)
+
         # forward duration predictor and length regulator
         d_masks = make_pad_mask(ilens).to(xs.device)
 
@@ -240,7 +263,51 @@ class FeedForwardTransformer(torch.nn.Module):
         if is_inference:
             return before_outs, after_outs, d_outs, one_hot_energy, one_hot_pitch
         else:
-            return before_outs, after_outs, d_outs, e_outs, p_outs
+            return before_outs, after_outs, d_outs, e_outs, p_outs, (w, sigma, mu, prosody_embeddings)
+
+    # def gaussian_probability(self, sigma, mu, target, mask=None):
+    #     target = target.unsqueeze(2).expand_as(sigma)
+    #     ret = (1.0 / math.sqrt(2 * math.pi)) * torch.exp(-0.5 * ((target - mu) / sigma)**2) / sigma
+    #     if mask is not None:
+    #         ret = ret.masked_fill(mask.unsqueeze(-1).unsqueeze(-1), 0)
+    #     return torch.prod(ret, 3)
+
+    # def mdn_loss(self, w, sigma, mu, target, mask=None):
+    #     """
+    #     w -- [B, src_len, num_gaussians]
+    #     sigma -- [B, src_len, num_gaussians, out_features]
+    #     mu -- [B, src_len, num_gaussians, out_features]
+    #     target -- [B, src_len, out_features]
+    #     mask -- [B, src_len]
+    #     """
+    #     prob = w * self.gaussian_probability(sigma, mu, target, mask)
+    #     nll = -torch.log(torch.sum(prob, dim=2))
+    #     if mask is not None:
+    #         nll = nll.masked_fill(mask, 0)
+    #     l_pp = torch.sum(nll, dim=1)
+    #     return torch.mean(l_pp)
+
+    def gaussian_probability(self, sigma, mu, target, mask=None):
+        target = target.unsqueeze(2).expand_as(sigma)
+        prob = (1.0 / math.sqrt(2 * math.pi)) * torch.exp(-0.5 * ((target - mu) / sigma)**2) / sigma
+        if mask is not None:
+            prob = prob.masked_fill(mask.unsqueeze(-1).unsqueeze(-1), 0)
+        return prob
+
+    def mdn_loss(self, w, sigma, mu, target, mask=None):
+        """
+        w -- [B, src_len, num_gaussians]
+        sigma -- [B, src_len, num_gaussians, out_features]
+        mu -- [B, src_len, num_gaussians, out_features]
+        target -- [B, src_len, out_features]
+        mask -- [B, src_len]
+        """
+        prob = w.unsqueeze(-1) * self.gaussian_probability(sigma, mu, target, mask)
+        nll = -torch.log(torch.sum(prob, dim=2))
+        if mask is not None:
+            nll = nll.masked_fill(mask.unsqueeze(-1), 0)
+        l_pp = torch.sum(nll, dim=1)
+        return torch.mean(l_pp)
 
     def forward(
         self,
@@ -267,7 +334,7 @@ class FeedForwardTransformer(torch.nn.Module):
         ys = ys[:, : max(olens)]  # torch.Size([32, 868, 80]) -> [B, Lmax, odim]
 
         # forward propagation
-        before_outs, after_outs, d_outs, e_outs, p_outs = self._forward(
+        before_outs, after_outs, d_outs, e_outs, p_outs, prosody_info = self._forward(
             xs, ilens, olens, ds, es, ps, is_inference=False
         )
 
@@ -303,6 +370,8 @@ class FeedForwardTransformer(torch.nn.Module):
         duration_loss = self.duration_criterion(d_outs, ds)
         energy_loss = self.energy_criterion(e_outs, es)
         pitch_loss = self.pitch_criterion(p_outs, ps)
+        w, sigma, mu, prosody_embeddings = prosody_info
+        mdn_loss = self.mdn_loss(w, sigma, mu, prosody_embeddings.detach(), ~src_masks)
 
         # make weighted mask and apply it
         if self.use_weighted_masking:

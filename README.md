@@ -12,3 +12,6 @@
       primaryClass={cs.SD}
 }
 ```
+
+## References
+- [keonlee9420's Comprehensive-Transformer-TTS](https://github.com/keonlee9420/Comprehensive-Transformer-TTS)

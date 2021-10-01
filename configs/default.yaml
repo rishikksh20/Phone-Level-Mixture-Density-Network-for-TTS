@@ -105,6 +105,12 @@ model:
 
   attn_plot : False
 
+  ### GMM-MDN
+  extractor_kernel_size: 9
+  predictor_kernel_size: [9, 5]
+  predictor_num_gaussians: 20
+  predictor_dropout: 0.2
+
 
 train:
   # optimization related
