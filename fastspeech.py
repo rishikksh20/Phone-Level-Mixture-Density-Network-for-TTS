@@ -86,17 +86,18 @@ class FeedForwardTransformer(torch.nn.Module):
         )
 
         self.prosody_extractor = ProsodyExtractor(
-                n_mel_channels=hp.audio.num_mels,
-                d_model=idim,
-                kernel_size=hp.model.extractor_kernel_size,
+            n_mel_channels=hp.audio.num_mels,
+            d_model=hp.model.adim,
+            kernel_size=hp.model.extractor_kernel_size,
         )
+
         self.prosody_predictor = ProsodyPredictor(
-            d_model=idim,
+            d_model=hp.model.adim,
             kernel_size=hp.model.predictor_kernel_size,
             num_gaussians=hp.model.predictor_num_gaussians,
             dropout=hp.model.predictor_dropout,
         )
-        self.prosody_linear = torch.nn.Linear(2 * idim, idim)
+        self.prosody_linear = torch.nn.Linear(2 * hp.model.adim, hp.model.adim)
 
         self.duration_predictor = DurationPredictor(
             idim=hp.model.adim,
@@ -183,15 +184,15 @@ class FeedForwardTransformer(torch.nn.Module):
         self.use_weighted_masking = hp.model.use_weighted_masking
 
     def _forward(
-        self,
-        xs: torch.Tensor,
-        ys: torch.Tensor,
-        ilens: torch.Tensor,
-        olens: torch.Tensor = None,
-        ds: torch.Tensor = None,
-        es: torch.Tensor = None,
-        ps: torch.Tensor = None,
-        is_inference: bool = False,
+            self,
+            xs: torch.Tensor,
+            ys: torch.Tensor,
+            ilens: torch.Tensor,
+            olens: torch.Tensor = None,
+            ds: torch.Tensor = None,
+            es: torch.Tensor = None,
+            ps: torch.Tensor = None,
+            is_inference: bool = False,
     ) -> Sequence[torch.Tensor]:
         # forward encoder
         x_masks = self._source_mask(
@@ -299,7 +300,7 @@ class FeedForwardTransformer(torch.nn.Module):
             prob -- [B, src_len, num_gaussians, out_features]
         """
         target = target.unsqueeze(2).expand_as(sigma)
-        prob = (1.0 / math.sqrt(2 * math.pi)) * torch.exp(-0.5 * ((target - mu) / sigma)**2) / sigma
+        prob = (1.0 / math.sqrt(2 * math.pi)) * torch.exp(-0.5 * ((target - mu) / sigma) ** 2) / sigma
         if mask is not None:
             prob = prob.masked_fill(mask.unsqueeze(-1).unsqueeze(-1), 0)
         return prob
@@ -320,14 +321,14 @@ class FeedForwardTransformer(torch.nn.Module):
         return torch.mean(l_pp)
 
     def forward(
-        self,
-        xs: torch.Tensor,
-        ilens: torch.Tensor,
-        ys: torch.Tensor,
-        olens: torch.Tensor,
-        ds: torch.Tensor,
-        es: torch.Tensor,
-        ps: torch.Tensor,
+            self,
+            xs: torch.Tensor,
+            ilens: torch.Tensor,
+            ys: torch.Tensor,
+            olens: torch.Tensor,
+            ds: torch.Tensor,
+            es: torch.Tensor,
+            ps: torch.Tensor,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """Calculate forward propagation.
         Args:
@@ -391,7 +392,7 @@ class FeedForwardTransformer(torch.nn.Module):
             out_weights /= ys.size(0) * ys.size(2)
             duration_masks = make_non_pad_mask(ilens).to(ys.device)
             duration_weights = (
-                duration_masks.float() / duration_masks.sum(dim=1, keepdim=True).float()
+                    duration_masks.float() / duration_masks.sum(dim=1, keepdim=True).float()
             )
             duration_weights /= ds.size(0)
 
@@ -457,7 +458,7 @@ class FeedForwardTransformer(torch.nn.Module):
         return x_masks.unsqueeze(-2) & x_masks.unsqueeze(-1)
 
     def _reset_parameters(
-        self, init_type: str, init_enc_alpha: float = 1.0, init_dec_alpha: float = 1.0
+            self, init_type: str, init_enc_alpha: float = 1.0, init_dec_alpha: float = 1.0
     ):
         # initialize parameters
         initialize(self, init_type)

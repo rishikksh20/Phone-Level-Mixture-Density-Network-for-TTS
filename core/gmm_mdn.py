@@ -162,15 +162,15 @@ class ProsodyPredictor(nn.Module):
 
         outputs = [p_0]
         for i in range(x.shape[1]):
-            p_input = torch.cat((x[:, i], outputs[-1]), dim=-1) # [B, 3 * d_model]
-            self.gru_hidden = self.gru_cell(p_input, self.gru_hidden) # [B, 2 * d_model]
+            p_input = torch.cat((x[:, i], outputs[-1]), dim=-1)  # [B, 3 * d_model]
+            self.gru_hidden = self.gru_cell(p_input, self.gru_hidden)  # [B, 2 * d_model]
             outputs.append(self.gru_hidden)
-        outputs = torch.stack(outputs[1:], dim=1) # [B, src_len, 2 * d_model]
+        outputs = torch.stack(outputs[1:], dim=1)  # [B, src_len, 2 * d_model]
 
         # GMM-MDN
         w, sigma, mu = self.gmm_mdn(outputs)
         if mask is not None:
-            w = w.masked_fill(mask.unsqueeze(-1), 0 if self.training else 1e-9) # 1e-9 for categorical sampling
+            w = w.masked_fill(mask.unsqueeze(-1), 0 if self.training else 1e-9)  # 1e-9 for categorical sampling
             sigma = sigma.masked_fill(mask.unsqueeze(-1).unsqueeze(-1), 0)
             mu = mu.masked_fill(mask.unsqueeze(-1).unsqueeze(-1), 0)
 
@@ -178,7 +178,7 @@ class ProsodyPredictor(nn.Module):
 
     @staticmethod
     def sample(w, sigma, mu, mask=None):
-        """ Draw samples from a GMM-MDN 
+        """ Draw samples from a GMM-MDN
         w -- [B, src_len, num_gaussians]
         sigma -- [B, src_len, num_gaussians, out_features]
         mu -- [B, src_len, num_gaussians, out_features]
@@ -204,12 +204,11 @@ class ProsodyPredictor(nn.Module):
         return output
 
 
-
-
 class ConvBlock(nn.Module):
     """ 1D Convolutional Block """
 
-    def __init__(self, in_channels, out_channels, kernel_size, dropout=None, normalization=nn.BatchNorm1d, activation=nn.ReLU, transpose=False):
+    def __init__(self, in_channels, out_channels, kernel_size, dropout=None, normalization=nn.BatchNorm1d,
+                 activation=nn.ReLU, transpose=False):
         super(ConvBlock, self).__init__()
 
         self.conv_layer = nn.Sequential(
@@ -230,6 +229,7 @@ class ConvBlock(nn.Module):
         self.transpose = transpose
 
     def forward(self, enc_input, mask=None):
+
         if not self.transpose:
             enc_input = enc_input.contiguous().transpose(1, 2)
         enc_output = self.conv_layer(enc_input)
@@ -247,7 +247,8 @@ class ConvBlock(nn.Module):
 class ConvBlock2D(nn.Module):
     """ 2D Convolutional Block """
 
-    def __init__(self, in_channels, out_channels, kernel_size, dropout=None, normalization=nn.BatchNorm2d, activation=nn.ReLU, transpose=False):
+    def __init__(self, in_channels, out_channels, kernel_size, dropout=None, normalization=nn.BatchNorm2d,
+                 activation=nn.ReLU, transpose=False):
         super(ConvBlock2D, self).__init__()
 
         self.conv_layer = nn.Sequential(
@@ -273,13 +274,13 @@ class ConvBlock2D(nn.Module):
         mask -- [B, H]
         """
         if not self.transpose:
-            enc_input = enc_input.contiguous().permute(0, 3, 1, 2) # [B, C_in, H, W]
+            enc_input = enc_input.contiguous().permute(0, 3, 1, 2)  # [B, C_in, H, W]
         enc_output = self.conv_layer(enc_input)
         if self.dropout is not None:
             enc_output = F.dropout(enc_output, self.dropout, self.training)
 
         if not self.transpose:
-            enc_output = enc_output.contiguous().permute(0, 2, 3, 1) # [B, H, W, C_out]
+            enc_output = enc_output.contiguous().permute(0, 2, 3, 1)  # [B, H, W, C_out]
         if mask is not None:
             enc_output = enc_output.masked_fill(mask.unsqueeze(-1).unsqueeze(-1), 0)
 
@@ -290,16 +291,16 @@ class ConvNorm(nn.Module):
     """ 1D Convolution """
 
     def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size=1,
-        stride=1,
-        padding=None,
-        dilation=1,
-        bias=True,
-        w_init_gain="linear",
-        transpose=False,
+            self,
+            in_channels,
+            out_channels,
+            kernel_size=1,
+            stride=1,
+            padding=None,
+            dilation=1,
+            bias=True,
+            w_init_gain="linear",
+            transpose=False,
     ):
         super(ConvNorm, self).__init__()
 
@@ -336,16 +337,16 @@ class ConvNorm2D(nn.Module):
     """ 2D Convolution """
 
     def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size=1,
-        stride=1,
-        padding=None,
-        dilation=1,
-        bias=True,
-        w_init_gain="linear",
-        transpose=False,
+            self,
+            in_channels,
+            out_channels,
+            kernel_size=1,
+            stride=1,
+            padding=None,
+            dilation=1,
+            bias=True,
+            w_init_gain="linear",
+            transpose=False,
     ):
         super(ConvNorm2D, self).__init__()
 
@@ -373,9 +374,9 @@ class ConvNorm2D(nn.Module):
         x -- [B, H, W, C] or [B, C, H, W]
         """
         if self.transpose:
-            x = x.contiguous().permute(0, 3, 1, 2) # [B, C, H, W]
+            x = x.contiguous().permute(0, 3, 1, 2)  # [B, C, H, W]
         x = self.conv(x)
         if self.transpose:
-            x = x.contiguous().permute(0, 2, 3, 1) # [B, H, W, C]
+            x = x.contiguous().permute(0, 2, 3, 1)  # [B, H, W, C]
 
         return x
