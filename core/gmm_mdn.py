@@ -53,7 +53,27 @@ class ProsodyExtractor(nn.Module):
                 b.append(self.get_prosody_embedding(m_p.unsqueeze(0)).squeeze(0))
             batch.append(torch.stack(b, dim=0))
 
-        return pad(batch)
+        return self.pad(batch)
+
+    def pad(self, input_ele, mel_max_length=None):
+        if mel_max_length:
+            max_len = mel_max_length
+        else:
+            max_len = max([input_ele[i].size(0) for i in range(len(input_ele))])
+
+        out_list = list()
+        for i, batch in enumerate(input_ele):
+            if len(batch.shape) == 1:
+                one_batch_padded = F.pad(
+                    batch, (0, max_len - batch.size(0)), "constant", 0.0
+                )
+            elif len(batch.shape) == 2:
+                one_batch_padded = F.pad(
+                    batch, (0, 0, 0, max_len - batch.size(0)), "constant", 0.0
+                )
+            out_list.append(one_batch_padded)
+        out_padded = torch.stack(out_list)
+        return out_padded
 
 
 class MDN(nn.Module):
@@ -182,6 +202,8 @@ class ProsodyPredictor(nn.Module):
         if mask is not None:
             output = output.masked_fill(mask.unsqueeze(-1), 0)
         return output
+
+
 
 
 class ConvBlock(nn.Module):

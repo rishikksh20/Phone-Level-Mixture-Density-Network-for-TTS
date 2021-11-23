@@ -25,6 +25,7 @@ from core.gmm_mdn import ProsodyExtractor, ProsodyPredictor
 from typeguard import check_argument_types
 from typing import Dict, Tuple, Sequence
 import math
+from utils.util import get_mask_from_lengths
 
 
 class FeedForwardTransformer(torch.nn.Module):
@@ -184,6 +185,7 @@ class FeedForwardTransformer(torch.nn.Module):
     def _forward(
         self,
         xs: torch.Tensor,
+        ys: torch.Tensor,
         ilens: torch.Tensor,
         olens: torch.Tensor = None,
         ds: torch.Tensor = None,
@@ -202,12 +204,12 @@ class FeedForwardTransformer(torch.nn.Module):
         # print("ys :", ys.shape)
 
         # GMM-MDN for Phone-Level Prosody Modelling
-        w, sigma, mu = self.prosody_predictor(text, src_mask)
+        w, sigma, mu = self.prosody_predictor(hs, get_mask_from_lengths(ilens))
         if self.training:
-            prosody_embeddings = self.prosody_extractor(mel, mel_len, duration_target, src_len)
+            prosody_embeddings = self.prosody_extractor(ys, olens, ds, ilens)
         else:
             prosody_embeddings = self.prosody_predictor.sample(w, sigma, mu)
-        x = x + self.prosody_linear(prosody_embeddings)
+        hs = hs + self.prosody_linear(prosody_embeddings)
 
         # forward duration predictor and length regulator
         d_masks = make_pad_mask(ilens).to(xs.device)
@@ -288,6 +290,14 @@ class FeedForwardTransformer(torch.nn.Module):
     #     return torch.mean(l_pp)
 
     def gaussian_probability(self, sigma, mu, target, mask=None):
+        """
+            sigma -- [B, src_len, num_gaussians, out_features]
+            mu -- [B, src_len, num_gaussians, out_features]
+            target -- [B, src_len, out_features]
+            mask -- [B, src_len]
+
+            prob -- [B, src_len, num_gaussians, out_features]
+        """
         target = target.unsqueeze(2).expand_as(sigma)
         prob = (1.0 / math.sqrt(2 * math.pi)) * torch.exp(-0.5 * ((target - mu) / sigma)**2) / sigma
         if mask is not None:
@@ -371,7 +381,8 @@ class FeedForwardTransformer(torch.nn.Module):
         energy_loss = self.energy_criterion(e_outs, es)
         pitch_loss = self.pitch_criterion(p_outs, ps)
         w, sigma, mu, prosody_embeddings = prosody_info
-        mdn_loss = self.mdn_loss(w, sigma, mu, prosody_embeddings.detach(), ~src_masks)
+        src_masks = get_mask_from_lengths(ilens)
+        mdn_loss = 0.02 * self.mdn_loss(w, sigma, mu, prosody_embeddings.detach(), ~src_masks)
 
         # make weighted mask and apply it
         if self.use_weighted_masking:
@@ -390,7 +401,7 @@ class FeedForwardTransformer(torch.nn.Module):
                 duration_loss.mul(duration_weights).masked_select(duration_masks).sum()
             )
 
-        loss = l1_loss + duration_loss + energy_loss + pitch_loss
+        loss = l1_loss + duration_loss + energy_loss + pitch_loss + mdn_loss
         report_keys = [
             {"l1_loss": l1_loss.item()},
             {"before_loss": before_loss.item()},
