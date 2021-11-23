@@ -345,7 +345,7 @@ class FeedForwardTransformer(torch.nn.Module):
 
         # forward propagation
         before_outs, after_outs, d_outs, e_outs, p_outs, prosody_info = self._forward(
-            xs, ilens, olens, ds, es, ps, is_inference=False
+            xs, ys, ilens, olens, ds, es, ps, is_inference=False
         )
 
         # modifiy mod part of groundtruth
