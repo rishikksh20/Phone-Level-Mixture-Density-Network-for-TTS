@@ -409,6 +409,7 @@ class FeedForwardTransformer(torch.nn.Module):
             {"duration_loss": duration_loss.item()},
             {"energy_loss": energy_loss.item()},
             {"pitch_loss": pitch_loss.item()},
+            {"mdn_loss": mdn_loss.item()},
             {"loss": loss.item()},
         ]
 
