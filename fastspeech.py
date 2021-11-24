@@ -383,7 +383,7 @@ class FeedForwardTransformer(torch.nn.Module):
         pitch_loss = self.pitch_criterion(p_outs, ps)
         w, sigma, mu, prosody_embeddings = prosody_info
         src_masks = get_mask_from_lengths(ilens)
-        mdn_loss = 0.02 * self.mdn_loss(w, sigma, mu, prosody_embeddings.detach(), ~src_masks)
+        mdn_loss = 0.02 * self.mdn_loss(w, sigma, mu, prosody_embeddings.detach(), src_masks)
 
         # make weighted mask and apply it
         if self.use_weighted_masking:
