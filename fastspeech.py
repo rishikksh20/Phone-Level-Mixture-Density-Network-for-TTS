@@ -186,12 +186,12 @@ class FeedForwardTransformer(torch.nn.Module):
     def _forward(
             self,
             xs: torch.Tensor,
-            ys: torch.Tensor,
             ilens: torch.Tensor,
             olens: torch.Tensor = None,
             ds: torch.Tensor = None,
             es: torch.Tensor = None,
             ps: torch.Tensor = None,
+            ys: torch.Tensor = None,
             is_inference: bool = False,
     ) -> Sequence[torch.Tensor]:
         # forward encoder
@@ -346,7 +346,7 @@ class FeedForwardTransformer(torch.nn.Module):
 
         # forward propagation
         before_outs, after_outs, d_outs, e_outs, p_outs, prosody_info = self._forward(
-            xs, ys, ilens, olens, ds, es, ps, is_inference=False
+            xs, ilens, olens, ds, es, ps, ys, is_inference=False
         )
 
         # modifiy mod part of groundtruth
