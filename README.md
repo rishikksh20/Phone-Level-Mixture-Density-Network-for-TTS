@@ -1,7 +1,7 @@
 # Phone Level Mixture Density Network for TTS
   This repo contains pytorch implementation of paper [Rich Prosody Diversity Modelling with Phone-level Mixture Density Network](https://arxiv.org/abs/2102.00851).
   
- # Training
+ # Training:
  ```
  python train.py --outdir etc -c configs/default.yaml -n "name"
 ```
@@ -18,5 +18,5 @@
 }
 ```
 
-## References
+## References:
 - [keonlee9420's Comprehensive-Transformer-TTS](https://github.com/keonlee9420/Comprehensive-Transformer-TTS)
